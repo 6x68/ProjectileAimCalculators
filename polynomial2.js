@@ -3,6 +3,10 @@
 const ARROW_GRAVITY = 0.05; // downward acceleration per tick
 const FULLY_CHARGED_SPEED = 3.0; // blocks per tick
 
+function isVecFinite(v) {
+  return v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+}
+
 /**
  * Calculates the normalized direction to hit a moving target.
  *
@@ -18,57 +22,62 @@ function calculateArrowAimDirection(
   targetVelocity,
   arrowSpeed = FULLY_CHARGED_SPEED
 ) {
-    const relPos = targetHeadPos.clone().sub(shooterEyePos);
-  const vEnemy = targetVelocity;
+  // Basic input validation
+  if (!isVecFinite(shooterEyePos) || !isVecFinite(targetHeadPos) || !isVecFinite(targetVelocity)) {
+    return null;
+  }
+  if (!Number.isFinite(arrowSpeed) || arrowSpeed <= 0) return null;
+
+  const relPos = targetHeadPos.clone().sub(shooterEyePos);
+  const { x, y, z } = relPos;
+  const { x: vx, y: vy, z: vz } = targetVelocity;
+
   // Fallback: Quadratic approximation (no drag, constant gravity)
-    const g = ARROW_GRAVITY;
-    const v = arrowSpeed;
+  const g = ARROW_GRAVITY;
+  const v = arrowSpeed;
 
-    // Relative position and velocity
-    const x = relPos.x;
-    const y = relPos.y;
-    const z = relPos.z;
-    const vx = vEnemy.x;
-    const vy = vEnemy.y;
-    const vz = vEnemy.z;
+  // Coefficients for quadratic equation: a*t^2 + b*t + c = 0
+  const a = 0.5 * g;
+  const b = -(v * vy + 0.5 * g * y);
+  const c = v * (x * vx + y * vy + z * vz);
 
-    // Derive quadratic equation for time t
-    // Arrow position at time t: (v*dx*t, v*dy*t - 0.5*g*t^2, v*dz*t)
-    // Target position at time t: (x + vx*t, y + vy*t, z + vz*t)
-    // Solve for t where they meet: v*dx*t = x + vx*t, etc.
-    // For y: v*dy*t - 0.5*g*t^2 = y + vy*t
-    // Let u = (dx, dy, dz) be the unit direction vector
-    // This leads to a quadratic in t for the y-component
+  // guard coefficients
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) return null;
 
-    // Coefficients for quadratic equation: a*t^2 + b*t + c = 0
-    const a = 0.5 * g;
-    const b = -(v * vy + 0.5 * g * y);
-    const c = v * (x * vx + y * vy + z * vz);
-    const discriminant = b * b - 4 * a * c;
+  const discriminant = b * b - 4 * a * c;
+  if (!Number.isFinite(discriminant) || discriminant < 0) {
+    return null; // no usable real solution
+  }
 
-    if (discriminant < 0) {
-      return null; // No real solution
-    }
+  // Solve quadratic: t = (-b ± sqrt(b^2 - 4ac)) / (2a)
+  const sqrtDisc = Math.sqrt(discriminant);
+  const denom = 2 * a;
+  if (!Number.isFinite(denom) || Math.abs(denom) < 1e-12) return null;
 
-    // Solve quadratic: t = (-b ± sqrt(b^2 - 4ac)) / (2a)
-    const sqrtDisc = Math.sqrt(discriminant);
-    const t1 = (-b + sqrtDisc) / (2 * a);
-    const t2 = (-b - sqrtDisc) / (2 * a);
+  const t1 = (-b + sqrtDisc) / denom;
+  const t2 = (-b - sqrtDisc) / denom;
 
-    // Choose positive time, prefer smaller if both positive
-    let t = t1 > 0 ? t1 : t2;
-    if (t2 > 0 && t2 < t) t = t2;
-    if (t <= 0) return null;
+  // Choose positive time, prefer smaller if both positive
+  let t = null;
+  if (t1 > 0 && t2 > 0) t = Math.min(t1, t2);
+  else if (t1 > 0) t = t1;
+  else if (t2 > 0) t = t2;
+  else return null;
 
-    // Calculate direction: target position at time t
-    const targetX = x + vx * t;
-    const targetY = y + vy * t - 0.5 * g * t * t; // Adjust for gravity
-    const targetZ = z + vz * t;
+  // guard t
+  if (!Number.isFinite(t) || t <= 0 || t > 1e6) return null;
 
-    // Direction vector
-    const dir = new Vector3$1(targetX, targetY, targetZ);
-    const len = dir.length();
-    if (len < 0.01) return null;
+  // Calculate direction: target position at time t
+  const targetX = x + vx * t;
+  const targetY = y + vy * t - 0.5 * g * t * t; // Adjust for gravity
+  const targetZ = z + vz * t;
 
-    return dir.normalize();
+  if (![targetX, targetY, targetZ].every(Number.isFinite)) return null;
+
+  // Direction vector
+  const dir = new Vector3$1(targetX, targetY, targetZ);
+  const len = dir.length();
+  if (!Number.isFinite(len) || len < 0.01) return null;
+
+  return dir.normalize();
 }
