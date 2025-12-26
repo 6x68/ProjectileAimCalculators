@@ -73,4 +73,4 @@ function calculateArrowAimDirection(
     return dir.normalize();
 }
 
-export default calculateArrowAimDirection;
+return calculateArrowAimDirection;
