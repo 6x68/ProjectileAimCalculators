@@ -106,6 +106,3 @@ function calculateArrowAimDirection(
 
   return null;
 }
-
-// using eval(await fetch("...")) instead of import now
-return calculateArrowAimDirection;
